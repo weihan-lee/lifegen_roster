@@ -1,0 +1,564 @@
+<!-- Set & Sound — roster web app.  Host on GitHub Pages.
+     LIVE MODE: set WEB_APP_URL below to your Apps Script /exec URL.
+     PREVIEW MODE: leave it blank — runs on embedded demo data in the browser. -->
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --bg:#EFEBE3;--surface:#FBFAF7;--ink:#20262B;--muted:#6B7077;
+    --pine:#1E5A50;--pine-dark:#15433C;--amber:#D6883B;--sage:#5E8C63;--clay:#BC5740;--hair:#DAD4C8;
+    --disp:'Bricolage Grotesque',system-ui,sans-serif;--body:'Inter',system-ui,sans-serif;--mono:'Space Mono',monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased;line-height:1.45}
+  .wrap{max-width:1000px;margin:0 auto;padding:18px 16px 90px}
+  header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;border-bottom:2px solid var(--ink);padding-bottom:12px;margin-bottom:16px}
+  .brand h1{font-family:var(--disp);font-weight:800;letter-spacing:-.02em;font-size:clamp(22px,4.5vw,34px);margin:0;line-height:1}
+  .brand p{margin:5px 0 0;color:var(--muted);font-size:12.5px}
+  .topbtns{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+  .modepill{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-family:var(--mono);background:var(--surface);border:1px solid var(--hair);padding:5px 9px;border-radius:999px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}.dot.lead{background:var(--amber)}.dot.live{background:var(--sage)}
+  nav.tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:18px}
+  nav.tabs button{font-weight:600;font-size:13.5px;cursor:pointer;background:transparent;border:1px solid transparent;border-radius:999px;padding:8px 14px;color:var(--muted)}
+  nav.tabs button:hover{color:var(--ink)}nav.tabs button.active{background:var(--ink);color:var(--bg)}
+  nav.tabs button.lead-only{display:none}body.is-lead nav.tabs button.lead-only{display:inline-block}
+  .card{background:var(--surface);border:1px solid var(--hair);border-radius:14px;padding:15px;margin-bottom:13px}
+  .card h2{font-family:var(--disp);font-weight:700;font-size:17px;margin:0 0 3px}.card .sub{color:var(--muted);font-size:12.5px;margin:0 0 11px}
+  .btn{font-weight:600;font-size:13.5px;cursor:pointer;border-radius:10px;padding:9px 14px;border:1px solid var(--pine);background:var(--pine);color:#fff}
+  .btn:hover{background:var(--pine-dark);border-color:var(--pine-dark)}
+  .btn.ghost{background:transparent;color:var(--pine);border-color:var(--hair)}.btn.ghost:hover{border-color:var(--pine);background:#fff}
+  .btn.amber{background:var(--amber);border-color:var(--amber)}.btn.amber:hover{filter:brightness(.94)}
+  .btn.sm{padding:5px 9px;font-size:12px;border-radius:8px}
+  label.fld{display:block;font-size:12px;color:var(--muted);font-weight:600;margin:0 0 4px}
+  input,select{font-family:var(--body);font-size:14px;padding:8px 10px;border:1px solid var(--hair);border-radius:9px;background:#fff;color:var(--ink);width:100%}
+  input:focus,select:focus{outline:2px solid var(--pine);outline-offset:-1px;border-color:var(--pine)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+  .svc{border:1px solid var(--hair);border-radius:12px;padding:14px;background:#fff}
+  .svc .date{font-family:var(--disp);font-weight:700;font-size:16px}
+  .svc .label{color:var(--muted);font-size:12px;margin-bottom:9px}
+  .sec{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:9px 0 3px;font-weight:700}
+  .slot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px dashed var(--hair);font-size:13px}
+  .slot:last-child{border-bottom:0}.slot .role{color:var(--muted);font-size:12px}
+  .slot .who{font-weight:600;text-align:right}.slot .who.empty{color:var(--clay)}
+  .star{color:var(--amber)}
+  .meter{height:7px;background:#E7E2D6;border-radius:99px;overflow:hidden;margin-top:8px}.meter>span{display:block;height:100%;background:var(--pine)}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+  .chip{font-size:12px;padding:5px 10px;border:1px solid var(--hair);border-radius:999px;background:#fff;cursor:pointer;user-select:none}
+  .chip.off{background:var(--clay);border-color:var(--clay);color:#fff}
+  .balancebar{display:flex;align-items:center;gap:10px;margin:6px 0}.balancebar .lab{width:130px;font-size:12.5px;font-weight:600;flex:none}
+  .balancebar .track{flex:1;height:16px;background:#E7E2D6;border-radius:6px;overflow:hidden}.balancebar .track>span{display:block;height:100%;background:linear-gradient(90deg,var(--pine),var(--amber))}
+  .balancebar .val{width:38px;text-align:right;font-family:var(--mono);font-size:12px;flex:none}
+  .tag{font-size:11px;font-family:var(--mono);padding:2px 7px;border-radius:6px;background:#EEE9DF}
+  .warn{background:#F7E7E2;border:1px solid #E3BBB0;color:#7c2f1f;padding:9px 12px;border-radius:10px;font-size:13px;margin-bottom:10px}
+  .ok{color:var(--sage);font-weight:600}
+  .help{font-size:12px;color:var(--muted);margin-top:6px}
+  .ovr{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 0;border-bottom:1px dashed var(--hair);font-size:13px}
+  .ovr .role{color:var(--muted);font-size:12px;flex:none;width:120px}
+  .ovr select{font-size:12.5px;padding:5px 7px}
+  table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:6px 6px;border-bottom:1px solid var(--hair)}
+  th{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  .footnote{font-size:11.5px;color:var(--muted);margin-top:18px}
+  .ovw{overflow-x:auto;border:1px solid var(--hair);border-radius:12px;background:#fff}
+  .ovw table{border-collapse:separate;border-spacing:0;font-size:12px;min-width:100%}
+  .ovw th,.ovw td{border-bottom:1px solid var(--hair);border-right:1px solid var(--hair);padding:6px 9px;white-space:nowrap;vertical-align:top}
+  .ovw thead th{position:sticky;top:0;background:var(--surface);font-family:var(--mono);font-size:11px;z-index:2;color:var(--muted)}
+  .ovw tbody th{position:sticky;left:0;background:var(--surface);text-align:left;font-weight:600;font-size:12px;z-index:1}
+  .ovw thead th:first-child{position:sticky;left:0;z-index:3}
+  .ovw td .nm{display:block;line-height:1.5}.ovw td .nm.md{color:var(--amber);font-weight:600}
+  .wkstrip{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+  .wk{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;color:var(--muted)}
+  .wk .pip{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff}
+  .pip.on{background:var(--pine)}.pip.off{background:#C9C3B5}.pip.away{background:var(--clay)}
+  .ocell{display:flex;align-items:center;gap:3px;margin:2px 0}
+  .ocell select{font-size:11.5px;padding:3px 4px;min-width:94px}
+  .ocell .lk{border:1px solid var(--hair);background:#fff;border-radius:6px;cursor:pointer;font-size:11px;padding:2px 5px;line-height:1.2}
+  .ocell.dup select{outline:2px solid var(--clay);border-color:var(--clay)}
+  .ocell.opt select{border-style:dashed;color:var(--muted)}
+  .dupwarn{color:var(--clay);font-weight:700}
+  dialog{border:1px solid var(--hair);border-radius:14px;padding:18px;max-width:440px;width:92%}dialog::backdrop{background:rgba(20,30,28,.4)}
+  .right{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><h1>Set &amp; Sound</h1><p>Worship team roster</p></div>
+    <div class="topbtns">
+      <span class="modepill"><span class="dot" id="modeDot"></span><span id="modeLabel">Member</span><span id="liveLabel"></span></span>
+      <div style="display:flex;gap:6px">
+        <button class="btn ghost sm" id="settingsBtn">⚙</button>
+        <button class="btn ghost sm" id="modeToggle">Leadership</button>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button data-tab="schedule" class="active">Schedule</button>
+    <button data-tab="overview">Overview</button>
+    <button data-tab="me">Me</button>
+    <button data-tab="leadership" class="lead-only">Leadership</button>
+  </nav>
+  <div id="view"></div>
+  <p class="footnote" id="foot"></p>
+</div>
+
+<dialog id="dlg"></dialog>
+
+<script>
+/* ============ CONFIG ============ */
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxPWYt6eHhArFgkOowdUTbwXkr9vT9HM_JBNzRnddv0B4W2_N4NvzuAS4WZSGJcTAw2Iw/exec";        // <-- paste your Apps Script /exec URL here for LIVE mode
+let LEAD_CODE_PREVIEW = "Ask Wei Han";// preview-mode leadership code (live mode uses the server's LEAD_CODE)
+let MAX_CONSECUTIVE = 4;       // most weeks anyone serves back-to-back before a forced rest
+let HORIZON_WEEKS = 18;        // preview only: matches your sheet (5 Jul → 1 Nov)
+
+/* ============ Role model ============ */
+const ROLE_ORDER = ["Worship Leader","Co Worship Leader","Singer (M)","Singer (F)","Electric Gtr",
+ "Acoustic Gtr","Bass","Piano","Keys","Violin","Drums","Drum Tech"];
+const SECTIONS = [["Vocals",["Worship Leader","Co Worship Leader","Singer (M)","Singer (F)"]],
+ ["Band",["Electric Gtr","Acoustic Gtr","Bass","Piano","Keys","Violin","Drums","Drum Tech"]]];
+function resolveRole(r){const m=/^(.*?)\s*\((M|F)\)\s*$/.exec(r);return m?{key:m[1].trim(),gender:m[2]}:{key:r,gender:null};}
+function eligible(mem,r){const {key,gender}=resolveRole(r);if(!(key in mem.skills))return false;if(gender&&mem.gender!==gender)return false;return true;}
+function skillFor(mem,r){return mem.skills[resolveRole(r).key]||0;}
+
+/* ============ Embedded demo data (your real worship team) ============ */
+function demoMembers(){
+  const M=(name,gender,r,md,sk,wt,mx,mdwt,pref)=>({name,gender,readiness:r,md,leader:false,skills:sk,
+    weight:(wt&&wt>0)?wt:1, maxServes:(mx==null?null:mx), mdWt:(mdwt&&mdwt>0)?mdwt:1, preferredRole:pref||null});
+  return [
+   M("Reuel","M",4,false,{"Worship Leader":5,"Co Worship Leader":5,"Acoustic Gtr":5}),
+   M("Darynn","F",4,false,{"Worship Leader":4,"Co Worship Leader":4}),
+   M("Mark","M",3,false,{"Worship Leader":3,"Co Worship Leader":3}),
+   M("Samson","M",5,false,{"Worship Leader":5,"Co Worship Leader":5,"Piano":5}),
+   M("Cynthia","F",5,false,{"Worship Leader":3,"Co Worship Leader":3,"Singer":5}),
+   M("Karyll","F",4,false,{"Singer":5}),M("Karynn","F",4,false,{"Singer":5}),M("Karmen","F",5,false,{"Singer":5}),
+   M("Maxine","F",4,false,{"Singer":3}),M("Jing Jie","F",3,false,{"Singer":4}),M("Jo Ann","F",3,false,{"Singer":3}),
+   M("Rehuel","F",3,false,{"Singer":3}),M("Noreen","F",2,false,{"Singer":3}),M("Sara Yow","F",2,false,{"Singer":3}),
+   M("Zoe","F",4,false,{"Singer":3}),M("Sophia","F",3,false,{"Singer":4}),M("Celynn","F",2,false,{"Singer":3}),
+   M("Chloe","F",2,false,{"Singer":3}),M("Hauii","M",4,false,{"Singer":5}),M("Dan Sim","M",3,false,{"Singer":4}),
+   M("Nelly","M",3,false,{"Singer":4}),
+   M("Wilson","M",5,true,{"Electric Gtr":5,"Acoustic Gtr":5},3,null,4),M("Hanson","M",4,true,{"Electric Gtr":5},3),
+   M("Mun Choong","M",4,false,{"Electric Gtr":3},1,2),M("Morven","M",4,false,{"Electric Gtr":4},2),
+   M("Winson","M",4,false,{"Electric Gtr":4,"Acoustic Gtr":5},2),
+   M("Bennet","M",5,true,{"Piano":5,"Keys":5},1,null,3),M("Jeshua","M",4,false,{"Piano":3,"Keys":4}),
+   M("Dan Kee","M",4,false,{"Keys":4}),M("Jon Ooi","M",4,false,{"Keys":3}),
+   M("Karmen Wong","M",4,false,{"Bass":4},2),M("Nigel","M",4,false,{"Bass":5},3),M("Wei Han","M",5,true,{"Bass":4},1,1),
+   M("Sara Kung","F",4,false,{"Violin":4}),M("Kylie","F",3,false,{"Violin":5},1,1),M("Kyvie","F",3,false,{"Violin":5},1,1),
+   M("Wilfred","M",5,false,{"Drums":5,"Drum Tech":5}),M("Adrian","M",5,true,{"Drums":5,"Drum Tech":5},1,null,2),
+   M("Andrew","M",4,false,{"Drums":4,"Drum Tech":5}),
+  ];
+}
+function demoServices(){
+  const base={"Worship Leader":1,"Co Worship Leader":1,"Singer (M)":1,"Singer (F)":3,"Electric Gtr":2,
+   "Acoustic Gtr":1,"Bass":1,"Piano":1,"Keys":1,"Violin":1,"Drums":1,"Drum Tech":1};
+  const out=[]; const d=new Date("2026-07-05T00:00:00");
+  for(let i=0;i<HORIZON_WEEKS;i++){
+    const req=Object.assign({},base,{"Violin": i%2===0 ? 1 : 0});  // sheet alternates violin week-to-week
+    out.push({date:d.toISOString().slice(0,10),label:"Sunday Service",req});
+    d.setDate(d.getDate()+7);
+  }
+  return out;
+}
+function demoBlackouts(){return {"Wei Han":{"2026-07-12":1,"2026-07-19":1},"Wilfred":{"2026-07-05":1,"2026-07-12":1,"2026-07-19":1}};}
+function demoRoleCaps(){return [{name:"Wilson",role:"Acoustic Gtr",max:2},{name:"Reuel",role:"Acoustic Gtr",max:2}];}
+
+/* ============ Assignment engine (mirrors the Apps Script) ============ */
+function generate(members,services,blackouts,locks,roleCaps){
+  locks=locks||{};
+  const capMap={}; (roleCaps||[]).forEach(c=>{ if(c&&c.name&&c.role&&c.max!=null&&c.max!=='') capMap[c.name+'|'+c.role]=+c.max; });
+  const roleServed={};
+  const byName={};members.forEach(m=>byName[m.name]=m);
+  const served={},streak={};members.forEach(m=>{served[m.name]=0;streak[m.name]=0;});
+  Object.values(locks).forEach(n=>{if(served[n]!=null)served[n]++;});
+  const reqRoles=s=>Object.keys(s.req).filter(r=>s.req[r]>0);
+  const lockedSlots=(date,role)=>{const res=[];Object.keys(locks).forEach(k=>{const p=k.split('|');if(p[0]===date&&p[1]===role)res[(+p[2])-1]=locks[k];});return res;};
+  const lockedRolesFor=date=>{const set={};Object.keys(locks).forEach(k=>{const p=k.split('|');if(p[0]===date)set[p[1]]=1;});return Object.keys(set);};
+  function cands(role,date,used,relax){
+    return members.filter(m=>{
+      if(!eligible(m,role))return false;
+      if(blackouts[m.name]&&blackouts[m.name][date])return false;
+      if(used.has(m.name))return false;
+      if(!relax){
+        if(streak[m.name]>=MAX_CONSECUTIVE)return false;                 // forced rest
+        if(m.maxServes!=null&&served[m.name]>=m.maxServes)return false;  // global cap
+        const cap=capMap[m.name+'|'+role]; if(cap!=null && (roleServed[m.name+'|'+role]||0)>=cap) return false;  // per-role cap
+      }
+      return true;
+    });
+  }
+  const pickSort=role=>(x,y)=>{
+    const px=(x.preferredRole&&x.preferredRole!==role)?1:0, py=(y.preferredRole&&y.preferredRole!==role)?1:0;
+    if(px!==py)return px-py;                                             // preferred-role people are last resort elsewhere
+    const rx=served[x.name]/x.weight, ry=served[y.name]/y.weight;        // weighted fair load
+    if(rx!==ry)return rx-ry;
+    const sk=skillFor(y,role)-skillFor(x,role);if(sk)return sk;
+    if(y.readiness!==x.readiness)return y.readiness-x.readiness;
+    return x.name.localeCompare(y.name);
+  };
+  const sv=services.map(s=>{
+    const rr=reqRoles(s); const allRoles=[...new Set([...rr,...lockedRolesFor(s.date)])];
+    return {...s,_o:allRoles,_rr:rr,_a:{}};
+  });
+  let prevUsed=new Set();
+  sv.forEach(s=>{
+    const used=new Set(); s._o.forEach(r=>s._a[r]=[]);
+    s._o.forEach(role=>{ lockedSlots(s.date,role).forEach((nm,i)=>{ if(nm){s._a[role][i]=nm;used.add(nm);roleServed[nm+'|'+role]=(roleServed[nm+'|'+role]||0)+1;} }); });  // pre-apply locks, any role/slot
+    const ord=s._rr.slice().sort((a,b)=>cands(a,s.date,new Set(),false).length-cands(b,s.date,new Set(),false).length);
+    ord.forEach(role=>{for(let slot=1;slot<=s.req[role];slot++){
+      if(s._a[role][slot-1])continue;
+      let pool=cands(role,s.date,used,false);
+      if(!pool.length)pool=cands(role,s.date,used,true);               // relax to avoid a gap
+      if(!pool.length){s._a[role][slot-1]=null;continue;}
+      pool.sort(pickSort(role));
+      const p=pool[0];s._a[role][slot-1]=p.name;used.add(p.name);served[p.name]++;roleServed[p.name+'|'+role]=(roleServed[p.name+'|'+role]||0)+1;
+    }});
+    members.forEach(m=>{ if(used.has(m.name)) streak[m.name]=prevUsed.has(m.name)?streak[m.name]+1:1; else streak[m.name]=0; });
+    prevUsed=used;
+  });
+  // balance pass (required slots only; locked picks are protected)
+  const strength=s=>{let t=0;s._o.forEach(r=>s._a[r].forEach(n=>{if(n)t+=skillFor(byName[n],r);}));return t;};
+  for(let it=0;it<8;it++){
+    const srt=sv.slice().sort((a,b)=>strength(b)-strength(a));const hi=srt[0],lo=srt[srt.length-1];
+    if(!hi||!lo||hi===lo)break;let diff=strength(hi)-strength(lo);if(diff<=1)break;let sw=false;
+    for(const role of hi._rr){if(!lo._a[role])continue;
+      for(let i=0;i<hi._a[role].length&&!sw;i++)for(let j=0;j<lo._a[role].length&&!sw;j++){
+        const A=hi._a[role][i],B=lo._a[role][j];if(!A||!B)continue;
+        if(locks[[hi.date,role,i+1].join('|')]||locks[[lo.date,role,j+1].join('|')])continue;
+        if(blackouts[A]&&blackouts[A][lo.date])continue;if(blackouts[B]&&blackouts[B][hi.date])continue;
+        if(!eligible(byName[B],role)||!eligible(byName[A],role))continue;
+        if(lo._o.some(r=>r!==role&&lo._a[r].indexOf(A)>=0))continue;
+        if(hi._o.some(r=>r!==role&&hi._a[r].indexOf(B)>=0))continue;
+        const nd=Math.abs((strength(hi)-skillFor(byName[A],role)+skillFor(byName[B],role))-(strength(lo)-skillFor(byName[B],role)+skillFor(byName[A],role)));
+        if(nd<diff){hi._a[role][i]=B;lo._a[role][j]=A;sw=true;}
+      }
+      if(sw)break;
+    }
+    if(!sw)break;
+  }
+  // MD weighted rotation
+  const mdCount={};let lastMd=null;const out={};const md={};
+  sv.forEach(s=>{
+    const usedN=[];s._o.forEach(r=>s._a[r].forEach(n=>{if(n)usedN.push(n);}));
+    const c=usedN.filter(n=>byName[n]&&byName[n].md);let pick=null;
+    if(c.length){c.sort((a,b)=>{const ra=(mdCount[a]||0)/byName[a].mdWt,rb=(mdCount[b]||0)/byName[b].mdWt;if(ra!==rb)return ra-rb;
+      const la=(a===lastMd)?1:0,lb=(b===lastMd)?1:0;if(la!==lb)return la-lb;
+      if(byName[b].readiness!==byName[a].readiness)return byName[b].readiness-byName[a].readiness;return a.localeCompare(b);});
+      pick=c[0];mdCount[pick]=(mdCount[pick]||0)+1;lastMd=pick;}
+    out[s.date]=s._a;md[s.date]=pick;
+  });
+  return {assigned:out,md,served,mdCount,strength:Object.fromEntries(sv.map(s=>[s.date,strength(s)]))};
+}
+
+/* ============ State ============ */
+let DATA={members:[],services:[],blackouts:{},locks:{},roleCaps:[]};
+let RESULT=null;
+let mode="member",activeTab="schedule",me=null,leadCode=null;
+const LIVE=!!WEB_APP_URL;
+
+async function api(action,params){
+  const u=new URL(WEB_APP_URL);u.searchParams.set("action",action);
+  Object.entries(params||{}).forEach(([k,v])=>u.searchParams.set(k,v));
+  const r=await fetch(u);return r.json();
+}
+async function apiPost(body){
+  const r=await fetch(WEB_APP_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(body)});
+  try{return await r.json();}catch(e){return {ok:true};}
+}
+
+async function boot(){
+  if(LIVE){
+    const m=await api("members",{});DATA.members=m.members.map(x=>({...x,skills:x.skills||{},readiness:x.readiness||0,weight:(x.weight&&x.weight>0)?x.weight:1,maxServes:(x.maxServes==null?null:x.maxServes),mdWt:(x.mdWt&&x.mdWt>0)?x.mdWt:1}));
+    // schedule comes from server roster; rebuild services/dates from it
+    const s=await api("schedule",{});buildFromServerRoster(s.roster);
+  }else{
+    DATA.members=demoMembers();DATA.services=demoServices();DATA.blackouts=demoBlackouts();DATA.locks={};DATA.roleCaps=demoRoleCaps();
+    RESULT=generate(DATA.members,DATA.services,DATA.blackouts,DATA.locks,DATA.roleCaps);
+  }
+  render();
+}
+function buildFromServerRoster(rows){
+  const dates=[...new Set(rows.map(r=>r.date))];
+  DATA.services=dates.map(d=>({date:d,label:"",req:{}}));
+  const idx={};DATA.services.forEach(s=>idx[s.date]=s);
+  const assigned={},md={};
+  rows.forEach(r=>{const a=assigned[r.date]=assigned[r.date]||{};(a[r.role]=a[r.role]||[])[r.slot-1]=r.name||null;
+    idx[r.date].req[r.role]=Math.max(idx[r.date].req[r.role]||0,r.slot);if(r.md)md[r.date]=r.name;});
+  RESULT={assigned,md,served:{},strength:{}};
+}
+
+/* ============ Render ============ */
+function render(){
+  document.body.classList.toggle("is-lead",mode==="lead");
+  modeDot.className="dot"+(mode==="lead"?" lead":"");
+  modeLabel.textContent=mode==="lead"?"Leadership":"Member";
+  liveLabel.innerHTML=LIVE?' · <span style="color:var(--sage)">live</span>':' · preview';
+  modeToggle.textContent=mode==="lead"?"Exit":"Leadership";
+  [...document.querySelectorAll("#tabs button")].forEach(b=>b.classList.toggle("active",b.dataset.tab===activeTab));
+  const v=document.getElementById("view");
+  v.innerHTML = activeTab==="schedule"?viewSchedule()
+              : activeTab==="overview"?viewOverview()
+              : activeTab==="me"?viewMe()
+              : viewLead();
+  foot.textContent = LIVE?"Live — reading and writing your Google Sheet via Apps Script."
+    :"Preview — running in your browser on demo data. Set WEB_APP_URL to go live.";
+  bind();
+}
+function prettyDate(d){const x=new Date(d+"T00:00:00");return x.toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short'});}
+
+function lineup(date,editable){
+  const a=RESULT.assigned[date]||{};const md=RESULT.md[date];let h="";
+  SECTIONS.forEach(([secName,roles])=>{
+    const present=roles.filter(r=>a[r]&&a[r].length);if(!present.length)return;
+    h+=`<div class="sec">${secName}</div>`;
+    present.forEach(role=>{
+      a[role].forEach((name,i)=>{
+        const star=name&&name===md?' <span class="star">★MD</span>':'';
+        h+=`<div class="slot"><span class="role">${role}</span><span class="who${name?'':' empty'}">${name?name+star:'— open —'}</span></div>`;
+      });
+    });
+  });
+  return h;
+}
+function viewSchedule(){
+  if(!DATA.services.length)return `<div class="card"><div class="help">No services yet.</div></div>`;
+  const cards=DATA.services.map(s=>`<div class="svc">
+    <div class="date">${prettyDate(s.date)}</div><div class="label">${s.label||''}</div>
+    ${lineup(s.date,false)}
+  </div>`).join("");
+  return `<div class="grid">${cards}</div>`;
+}
+
+function prettyShort(d){const x=new Date(d+"T00:00:00");return x.toLocaleDateString(undefined,{day:'numeric',month:'short'});}
+
+function viewOverview(){
+  if(!DATA.services.length)return `<div class="card"><div class="help">No services yet.</div></div>`;
+  const roles=ROLE_ORDER.filter(r=>DATA.services.some(s=>(s.req[r]||0)>0));
+  const head=`<tr><th>Role</th>${DATA.services.map(s=>`<th>${prettyShort(s.date)}</th>`).join("")}</tr>`;
+  const roleRow=role=>{
+    const cells=DATA.services.map(s=>{
+      const arr=(RESULT.assigned[s.date]||{})[role]||[];
+      const inner=arr.map(n=>n?`<span class="nm">${n}</span>`:`<span class="nm" style="color:var(--clay)">—</span>`).join("");
+      return `<td>${inner}</td>`;
+    }).join("");
+    return `<tr><th>${role}</th>${cells}</tr>`;
+  };
+  const mdRow=()=>`<tr><th>MD</th>${DATA.services.map(s=>`<td><span class="nm md">${RESULT.md[s.date]||'—'}</span></td>`).join("")}</tr>`;
+  const anchor = roles.includes("Co Worship Leader") ? "Co Worship Leader"
+               : roles.includes("Worship Leader") ? "Worship Leader" : null;
+  let body="";
+  if(anchor===null) body+=mdRow();
+  roles.forEach(role=>{ body+=roleRow(role); if(role===anchor) body+=mdRow(); });
+  return `<div class="card"><h2>Quarter overview</h2>
+    <p class="sub">Roles down the side, weeks across the top. Scroll sideways for more weeks.</p>
+    <div class="ovw"><table><thead>${head}</thead><tbody>${body}</tbody></table></div></div>`;
+}
+
+function myWeeks(name){
+  return DATA.services.map(s=>{
+    const a=RESULT.assigned[s.date]||{};let role=null;
+    for(const r in a){ if((a[r]||[]).indexOf(name)>=0){role=r;break;} }
+    return {date:s.date, role, away:!!(DATA.blackouts[name]&&DATA.blackouts[name][s.date]), md:RESULT.md[s.date]===name};
+  });
+}
+function viewMe(){
+  const names=DATA.members.map(m=>m.name).sort();
+  const opts=names.map(n=>`<option value="${n}" ${n===me?'selected':''}>${n}</option>`).join("");
+  const picker=`<div style="margin-bottom:12px"><label class="fld">Who are you?</label>
+    <select id="meSel"><option value="">Select your name…</option>${opts}</select></div>`;
+  if(!me) return `<div class="card"><h2>Me</h2>${picker}<div class="help">Pick your name to see how often and when you're on, and set dates you can't serve.</div></div>`;
+  const rows=myWeeks(me);
+  const onCount=rows.filter(r=>r.role).length;
+  const strip=rows.map(r=>{
+    const cls=r.role?'on':(r.away?'away':'off');
+    const lab=r.role?(r.md?'MD':'✓'):(r.away?'✕':'·');
+    return `<div class="wk"><div class="pip ${cls}" title="${r.role||(r.away?'away':'off')}">${lab}</div><span>${prettyShort(r.date)}</span></div>`;
+  }).join("");
+  const list=rows.filter(r=>r.role).map(r=>`<div class="slot"><span class="role">${prettyDate(r.date)}</span><span class="who">${r.role}${r.md?' <span class="star">★MD</span>':''}</span></div>`).join("")||'<div class="help">Not rostered in this period.</div>';
+  const bl=DATA.blackouts[me]||{};
+  const chips=DATA.services.map(s=>`<span class="chip ${bl[s.date]?'off':''}" data-black="${s.date}">${prettyShort(s.date)}${bl[s.date]?' ✕':''}</span>`).join("");
+  return `<div class="card"><h2>Me</h2>${picker}
+     <div class="sec">You're on ${onCount} of ${rows.length} weeks · ✓ serving · MD music director · ✕ you're away</div>
+     <div class="wkstrip">${strip}</div></div>
+   <div class="card"><h2>When you're on</h2>${list}</div>
+   <div class="card"><h2>My availability</h2><p class="sub">Tap a date to mark yourself unavailable. Red = can't serve.</p>
+     <div class="chips">${chips}</div>
+     <div class="help">${Object.keys(bl).length} date(s) blocked.</div></div>`;
+}
+
+function viewLead(){
+  // strength bars
+  const maxS=Math.max(5,...Object.values(RESULT.strength||{}),1);
+  const bars=DATA.services.map(s=>{const t=(RESULT.strength||{})[s.date]||0;
+    return `<div class="balancebar"><div class="lab">${prettyDate(s.date)}</div><div class="track"><span style="width:${(t/maxS*100).toFixed(0)}%"></span></div><div class="val">${t}</div></div>`;}).join("");
+  // fairness + MD counts
+  const fair=Object.entries(RESULT.served||{}).filter(([,c])=>c>0).sort((a,b)=>b[1]-a[1]);
+  const fairChips=fair.map(([n,c])=>`<span class="tag">${n} ·${c}</span>`).join(" ")||'<span class="help">run generate</span>';
+  const mdc=Object.entries(RESULT.mdCount||{}).sort((a,b)=>b[1]-a[1]);
+  const mdChips=mdc.map(([n,c])=>`<span class="tag">${n} ·${c}</span>`).join(" ")||'<span class="help">—</span>';
+  // preview-only controls (live mode generates from the sheet's own dates)
+  const previewControls = LIVE ? '' : `
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">
+      <div style="flex:none"><label class="fld">Weeks to generate</label>
+        <select id="weeks">${[4,8,13,18].map(w=>`<option ${w===HORIZON_WEEKS?'selected':''} value="${w}">${w}</option>`).join("")}</select></div>
+      <div style="flex:none"><label class="fld">Max weeks in a row</label>
+        <select id="maxc">${[2,3,4,5].map(w=>`<option ${w===MAX_CONSECUTIVE?'selected':''} value="${w}">${w}</option>`).join("")}</select></div>
+    </div>`;
+  // override grid (roles down, weeks across) — mirrors Overview, with editable cells
+  const ovRoles=ROLE_ORDER.filter(r=>DATA.services.some(s=>(s.req[r]||0)>0));
+  const dupByDate={};
+  DATA.services.forEach(s=>{const c={};const a=RESULT.assigned[s.date]||{};
+    Object.keys(a).forEach(r=>(a[r]||[]).forEach(n=>{if(n)c[n]=(c[n]||0)+1;}));dupByDate[s.date]=c;});
+  const ohead=`<tr><th>Role</th>${DATA.services.map(s=>`<th>${prettyShort(s.date)}</th>`).join("")}</tr>`;
+  const obody=ovRoles.map(role=>{
+    const cells=DATA.services.map(s=>{
+      const need=s.req[role]||0;
+      const a=(RESULT.assigned[s.date]||{})[role]||[];
+      const shown=Math.max(need, a.length);     // show required + any manual extras already placed
+      const cands=DATA.members.filter(m=>eligible(m,role)).map(m=>m.name).sort();
+      let inner="";
+      for(let i=0;i<=shown;i++){                 // +1 = an always-open optional slot
+        const cur=a[i]||""; const optional=i>=need;
+        if(optional && !cur && i!==shown) continue;   // only one trailing empty optional
+        const locked=DATA.locks[[s.date,role,i+1].join('|')];
+        const isDup=cur && dupByDate[s.date][cur]>1;
+        inner+=`<div class="ocell ${isDup?'dup':''} ${optional?'opt':''}">
+          <select data-assign="${s.date}|${role}|${i+1}" ${optional?'title="optional extra — lock to keep on regenerate"':''}><option value="">${optional?'+ add':'—'}</option>
+            ${cands.map(n=>`<option ${n===cur?'selected':''} value="${n}">${n}${DATA.blackouts[n]&&DATA.blackouts[n][s.date]?' ⚠away':''}</option>`).join("")}
+          </select>
+          <button class="lk" data-lock="${s.date}|${role}|${i+1}" title="lock">${locked?'🔒':'🔓'}</button>
+          ${isDup?'<span class="dupwarn" title="Already on this service">⚠</span>':''}</div>`;
+      }
+      return `<td>${inner}</td>`;
+    }).join("");
+    return `<tr><th>${role}</th>${cells}</tr>`;
+  }).join("");
+  const omd=`<tr><th>MD</th>${DATA.services.map(s=>`<td><span class="nm md">${RESULT.md[s.date]||'—'}</span></td>`).join("")}</tr>`;
+  const overrideGrid=`<div class="ovw"><table><thead>${ohead}</thead><tbody>${obody}${omd}</tbody></table></div>`;
+  // team table — readiness + editable weights (preview); read-only in live (edit in the Sheet)
+  const ed=!LIVE;
+  const wtCell=(m)=> ed
+    ? `<td><input data-wt="${m.name}" type="number" min="0.5" step="0.5" value="${m.weight}" style="width:58px;padding:4px"></td>
+       <td><input data-mx="${m.name}" type="number" min="0" step="1" value="${m.maxServes==null?'':m.maxServes}" placeholder="—" style="width:52px;padding:4px"></td>
+       <td><input data-mdwt="${m.name}" type="number" min="0.5" step="0.5" value="${m.mdWt}" ${m.md?'':'disabled'} style="width:58px;padding:4px"></td>`
+    : `<td>${m.weight}</td><td>${m.maxServes==null?'—':m.maxServes}</td><td>${m.md?m.mdWt:'—'}</td>`;
+  const team=DATA.members.slice().sort((a,b)=>b.readiness-a.readiness).map(m=>
+    `<tr><td>${m.name}</td><td>${m.gender}</td><td>${m.md?'Y':''}</td>
+     <td class="mono">${"●".repeat(m.readiness)}${"○".repeat(5-m.readiness)}</td>${wtCell(m)}</tr>`).join("");
+  const nameOpts=cur=>DATA.members.map(m=>m.name).sort().map(n=>`<option ${n===cur?'selected':''} value="${n}">${n}</option>`).join("");
+  const roleOpts=cur=>ROLE_ORDER.map(r=>`<option ${r===cur?'selected':''} value="${r}">${r}</option>`).join("");
+  const capRows=(DATA.roleCaps||[]).map((c,i)=>`<div class="ocell" style="margin-bottom:6px">
+      <select data-cap="${i}" data-capfield="name" ${ed?'':'disabled'}>${nameOpts(c.name)}</select>
+      <select data-cap="${i}" data-capfield="role" ${ed?'':'disabled'} style="min-width:120px">${roleOpts(c.role)}</select>
+      <span style="font-size:12px;color:var(--muted)">max</span>
+      <input data-cap="${i}" data-capfield="max" type="number" min="0" step="1" value="${c.max}" ${ed?'':'disabled'} style="width:52px;padding:4px">
+      ${ed?`<button class="btn sm danger" data-capdel="${i}">✕</button>`:''}
+    </div>`).join("") || '<div class="help">No per-role caps set.</div>';
+  const capsCard=`<div class="card"><h2>Per-role caps</h2>
+    <p class="sub">Limit how many times a person fills a <b>specific role</b> over this run — e.g. Wilson &amp; Reuel max 2 on Acoustic, so Winson takes the rest. Soft: relaxed only if a slot would otherwise be empty.${ed?'':' Edit these in the sheet for live mode.'}</p>
+    ${capRows}
+    ${ed?'<div style="margin-top:8px"><button class="btn ghost sm" id="capAdd">+ Add cap</button></div>':''}</div>`;
+  return `<div class="card"><h2>Generate &amp; balance</h2>
+    ${previewControls}
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="btn amber" id="gen">⚡ Generate</button>
+      <button class="btn ghost" id="clr">Clear locks</button></div>
+    <div class="sec">Team strength balance</div>${bars}
+    <div class="sec" style="margin-top:10px">Load fairness (times serving)</div><div class="chips">${fairChips}</div>
+    <div class="sec" style="margin-top:10px">MD turns</div><div class="chips">${mdChips}</div>
+  </div>
+  ${capsCard}
+  <div class="card"><h2>Manual override</h2><p class="sub">Roles down, weeks across. Change any slot; 🔒 keeps it on regenerate. <b>⚠ red = same person already on that service</b> (allowed, just flagged). ⚠away = flagged unavailable.</p>
+    ${overrideGrid}</div>
+  <div class="card"><h2>Team${ed?' — readiness &amp; weights':' (readiness visible)'}</h2>
+    ${ed?'<p class="sub">Edit Load / Max / MD weight, then Generate to watch the skew. (In live mode these live in the Sheet.)</p>':''}
+    <table><thead><tr><th>Name</th><th>G</th><th>MD</th><th>Readiness</th><th>Load Wt</th><th>Max</th><th>MD Wt</th></tr></thead><tbody>${team}</tbody></table></div>`;
+}
+
+/* ============ Actions ============ */
+function regen(){RESULT=generate(DATA.members,DATA.services,DATA.blackouts,DATA.locks,DATA.roleCaps);}
+function bind(){
+  const meSel=document.getElementById("meSel");if(meSel)meSel.onchange=e=>{me=e.target.value||null;render();};
+  const weeks=document.getElementById("weeks");if(weeks)weeks.onchange=e=>{HORIZON_WEEKS=+e.target.value;DATA.services=demoServices();DATA.locks={};regen();render();};
+  const maxc=document.getElementById("maxc");if(maxc)maxc.onchange=e=>{MAX_CONSECUTIVE=+e.target.value;regen();render();};
+  const setWt=(attr,key)=>document.querySelectorAll(`[data-${attr}]`).forEach(inp=>inp.onchange=()=>{
+    const m=DATA.members.find(x=>x.name===inp.dataset[attr]);if(!m)return;
+    const v=inp.value===''?null:Number(inp.value);
+    if(key==='maxServes')m.maxServes=(v==null||isNaN(v))?null:v;
+    else m[key]=(v&&v>0)?v:1;
+    regen();render();
+  });
+  setWt('wt','weight');setWt('mx','maxServes');setWt('mdwt','mdWt');
+  document.querySelectorAll("[data-cap]").forEach(el=>el.onchange=()=>{
+    const i=+el.dataset.cap, f=el.dataset.capfield;
+    if(!DATA.roleCaps[i])return;
+    DATA.roleCaps[i][f] = (f==='max') ? (el.value===''?'':+el.value) : el.value;
+    regen();render();
+  });
+  document.querySelectorAll("[data-capdel]").forEach(b=>b.onclick=()=>{ DATA.roleCaps.splice(+b.dataset.capdel,1); regen();render(); });
+  const capAdd=document.getElementById("capAdd");if(capAdd)capAdd.onclick=()=>{
+    const firstName=DATA.members.map(m=>m.name).sort()[0]||"";
+    DATA.roleCaps.push({name:firstName,role:"Acoustic Gtr",max:2}); regen();render();
+  };
+  document.querySelectorAll("[data-black]").forEach(c=>c.onclick=async()=>{
+    if(!me)return;const d=c.dataset.black;DATA.blackouts[me]=DATA.blackouts[me]||{};
+    const on=DATA.blackouts[me][d];
+    if(on)delete DATA.blackouts[me][d];else DATA.blackouts[me][d]=1;
+    if(LIVE)await apiPost({action:"blackout",name:me,date:d,op:on?"remove":"add"});
+    if(!LIVE)regen();render();
+  });
+  const gen=document.getElementById("gen");if(gen)gen.onclick=async()=>{
+    if(LIVE){await apiPost({action:"generate",code:leadCode});const s=await api("schedule",{});buildFromServerRoster(s.roster);}
+    else regen();
+    render();
+  };
+  const clr=document.getElementById("clr");if(clr)clr.onclick=()=>{DATA.locks={};if(!LIVE)regen();render();};
+  document.querySelectorAll("[data-assign]").forEach(sel=>sel.onchange=async()=>{
+    const [d,role,slot]=sel.dataset.assign.split("|");
+    if(LIVE){await apiPost({action:"override",code:leadCode,date:d,role,slot:+slot,name:sel.value});const s=await api("schedule",{});buildFromServerRoster(s.roster);}
+    else{const a=RESULT.assigned[d];a[role]=a[role]||[];a[role][+slot-1]=sel.value||null;}
+    render();
+  });
+  document.querySelectorAll("[data-lock]").forEach(b=>b.onclick=async()=>{
+    const key=b.dataset.lock;const [d,role,slot]=key.split("|");
+    const name=((RESULT.assigned[d]||{})[role]||[])[+slot-1];if(!name)return;
+    if(DATA.locks[key])delete DATA.locks[key];else DATA.locks[key]=name;
+    if(LIVE)await apiPost({action:"override",code:leadCode,date:d,role,slot:+slot,locked:!!DATA.locks[key]});
+    render();
+  });
+}
+
+/* ============ Shell ============ */
+document.getElementById("tabs").onclick=e=>{const b=e.target.closest("button");if(!b)return;activeTab=b.dataset.tab;render();};
+function openLeadDialog(){
+  const d=document.getElementById("dlg");
+  d.innerHTML=`<h2 style="font-family:var(--disp);margin:0 0 8px">Leadership access</h2>
+    <p class="help" style="margin:0 0 10px">${LIVE?'Enter your leadership code.':'Preview code: 1234'}</p>
+    <input id="lc" type="password" placeholder="Code" autofocus>
+    <div id="lcerr" class="help" style="color:var(--clay);min-height:15px"></div>
+    <div class="right"><button class="btn ghost" id="lcCancel">Cancel</button><button class="btn" id="lcGo">Unlock</button></div>`;
+  d.showModal();
+  const go=()=>{
+    const pin=d.querySelector("#lc").value;
+    if(LIVE){ leadCode=pin; mode="lead"; activeTab="leadership"; d.close(); render(); }
+    else if(pin===LEAD_CODE_PREVIEW){ mode="lead"; activeTab="leadership"; d.close(); render(); }
+    else d.querySelector("#lcerr").textContent="Wrong code.";
+  };
+  d.querySelector("#lcGo").onclick=go;
+  d.querySelector("#lc").addEventListener("keydown",e=>{if(e.key==="Enter")go();});
+  d.querySelector("#lcCancel").onclick=()=>d.close();
+}
+document.getElementById("modeToggle").onclick=()=>{
+  if(mode==="lead"){mode="member";if(activeTab==="leadership")activeTab="schedule";render();return;}
+  openLeadDialog();
+};
+document.getElementById("settingsBtn").onclick=()=>{
+  const d=document.getElementById("dlg");
+  d.innerHTML=`<h2 style="font-family:var(--disp);margin:0 0 8px">Connection</h2>
+    <p class="help" style="margin:0 0 12px">${LIVE?'Connected to your Apps Script web app.':'Preview mode. To go live, set the WEB_APP_URL constant at the top of this file to your Apps Script /exec URL, then host on GitHub Pages.'}</p>
+    <div class="right"><button class="btn" id="dc">Close</button></div>`;
+  d.showModal();d.querySelector("#dc").onclick=()=>d.close();
+};
+boot();
+</script>
