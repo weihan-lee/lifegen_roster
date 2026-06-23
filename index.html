@@ -110,7 +110,7 @@
 <script>
 /* ============ CONFIG ============ */
 const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxPWYt6eHhArFgkOowdUTbwXkr9vT9HM_JBNzRnddv0B4W2_N4NvzuAS4WZSGJcTAw2Iw/exec";        // <-- paste your Apps Script /exec URL here for LIVE mode
-let LEAD_CODE_PREVIEW = "Ask Wei Han";// preview-mode leadership code (live mode uses the server's LEAD_CODE)
+let LEAD_CODE_PREVIEW = "1234";// preview-mode leadership code (live mode uses the server's LEAD_CODE)
 let MAX_CONSECUTIVE = 4;       // most weeks anyone serves back-to-back before a forced rest
 let HORIZON_WEEKS = 18;        // preview only: matches your sheet (5 Jul → 1 Nov)
 
@@ -267,15 +267,23 @@ async function apiPost(body){
   try{return await r.json();}catch(e){return {ok:true};}
 }
 
+function mapMembers_(list){ return list.map(x=>({...x,skills:x.skills||{},readiness:x.readiness||0,weight:(x.weight&&x.weight>0)?x.weight:1,maxServes:(x.maxServes==null?null:x.maxServes),mdWt:(x.mdWt&&x.mdWt>0)?x.mdWt:1})); }
 async function boot(){
   if(LIVE){
-    const m=await api("members",{});DATA.members=m.members.map(x=>({...x,skills:x.skills||{},readiness:x.readiness||0,weight:(x.weight&&x.weight>0)?x.weight:1,maxServes:(x.maxServes==null?null:x.maxServes),mdWt:(x.mdWt&&x.mdWt>0)?x.mdWt:1}));
-    // schedule comes from server roster; rebuild services/dates from it
+    const m=await api("members",{});DATA.members=mapMembers_(m.members);
     const s=await api("schedule",{});buildFromServerRoster(s.roster);
   }else{
     DATA.members=demoMembers();DATA.services=demoServices();DATA.blackouts=demoBlackouts();DATA.locks={};DATA.roleCaps=demoRoleCaps();
     RESULT=generate(DATA.members,DATA.services,DATA.blackouts,DATA.locks,DATA.roleCaps);
   }
+  render();
+}
+// live: re-fetch team WITH the leadership code so skills/readiness/weights load, then rebuild + recompute stats
+async function refreshLead(){
+  try{
+    const m=await api("members",{code:leadCode}); if(m&&m.members) DATA.members=mapMembers_(m.members);
+    const s=await api("schedule",{}); buildFromServerRoster(s.roster);
+  }catch(e){}
   render();
 }
 function buildFromServerRoster(rows){
@@ -285,7 +293,13 @@ function buildFromServerRoster(rows){
   const assigned={},md={};
   rows.forEach(r=>{const a=assigned[r.date]=assigned[r.date]||{};(a[r.role]=a[r.role]||[])[r.slot-1]=r.name||null;
     idx[r.date].req[r.role]=Math.max(idx[r.date].req[r.role]||0,r.slot);if(r.md)md[r.date]=r.name;});
-  RESULT={assigned,md,served:{},strength:{}};
+  // derive strength / fairness / MD counts from the roster + member skills (skills present only in lead mode)
+  const byName={};DATA.members.forEach(m=>byName[m.name]=m);
+  const served={},strength={},mdCount={};
+  DATA.services.forEach(s=>{let t=0;const a=assigned[s.date]||{};
+    Object.keys(a).forEach(role=>a[role].forEach(n=>{if(n){served[n]=(served[n]||0)+1; if(byName[n]&&byName[n].skills) t+=skillFor(byName[n],role);}}));
+    strength[s.date]=t; if(md[s.date])mdCount[md[s.date]]=(mdCount[md[s.date]]||0)+1;});
+  RESULT={assigned,md,served,strength,mdCount};
 }
 
 /* ============ Render ============ */
@@ -541,7 +555,7 @@ function openLeadDialog(){
   d.showModal();
   const go=()=>{
     const pin=d.querySelector("#lc").value;
-    if(LIVE){ leadCode=pin; mode="lead"; activeTab="leadership"; d.close(); render(); }
+    if(LIVE){ leadCode=pin; mode="lead"; activeTab="leadership"; d.close(); render(); refreshLead(); }
     else if(pin===LEAD_CODE_PREVIEW){ mode="lead"; activeTab="leadership"; d.close(); render(); }
     else d.querySelector("#lcerr").textContent="Wrong code.";
   };
