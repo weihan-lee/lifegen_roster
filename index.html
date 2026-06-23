@@ -86,6 +86,18 @@
   .dots .d:hover{transform:scale(1.18)}
   .dots.dis{opacity:.5;cursor:default}
   .capnone{font-size:11px;color:var(--muted);margin-left:6px}
+  #gate,#busy{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:1000}
+  #gate{background:var(--bg)}
+  #busy{background:rgba(239,235,227,.72);z-index:1100}
+  .gatebox{background:var(--surface);border:1px solid var(--hair);border-radius:16px;padding:28px;max-width:340px;width:90%;text-align:center}
+  .gatebox h1{font-family:var(--disp);font-weight:800;letter-spacing:-.02em;margin:0 0 4px}
+  .gatebox p{color:var(--muted);font-size:13px;margin:0 0 14px}
+  .gatebox input{margin-bottom:8px}.gatebox .btn{width:100%}
+  #gateerr{color:var(--clay);font-size:12px;min-height:15px;margin-bottom:4px}
+  .busybox{background:var(--surface);border:1px solid var(--hair);border-radius:14px;padding:22px 28px;display:flex;flex-direction:column;align-items:center;gap:10px}
+  .spin{width:28px;height:28px;border:3px solid var(--hair);border-top-color:var(--pine);border-radius:50%;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #busymsg{font-size:13px;color:var(--muted);font-family:var(--mono)}
   dialog{border:1px solid var(--hair);border-radius:14px;padding:18px;max-width:440px;width:92%}dialog::backdrop{background:rgba(20,30,28,.4)}
   .right{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
 </style>
@@ -114,10 +126,21 @@
 
 <dialog id="dlg"></dialog>
 
+<div id="gate"><div class="gatebox">
+  <h1>Set &amp; Sound</h1>
+  <p>Enter the team access code.</p>
+  <input id="gatein" type="password" placeholder="Access code" autofocus>
+  <div id="gateerr"></div>
+  <button class="btn" id="gatego">Enter</button>
+</div></div>
+
+<div id="busy"><div class="busybox"><div class="spin"></div><div id="busymsg">Working…</div></div></div>
+
 <script>
 /* ============ CONFIG ============ */
 const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxPWYt6eHhArFgkOowdUTbwXkr9vT9HM_JBNzRnddv0B4W2_N4NvzuAS4WZSGJcTAw2Iw/exec";        // <-- paste your Apps Script /exec URL here for LIVE mode
 let LEAD_CODE_PREVIEW = "1234";// preview-mode leadership code (live mode uses the server's LEAD_CODE)
+let SITE_CODE = "1122";   // shared code to open the page; set to "" to disable the gate
 let MAX_CONSECUTIVE = 4;       // most weeks anyone serves back-to-back before a forced rest
 let HORIZON_WEEKS = 18;        // preview only: matches your sheet (5 Jul → 1 Nov)
 
@@ -524,9 +547,9 @@ function bind(){
     else if(field==='Load Wt') m.weight=nv||1;
     else if(field==='MD Wt') m.mdWt=nv||1;
     else if(field==='Max Serves') m.maxServes = nv===0?null:nv;
-    if(LIVE) await apiPost({action:'member',code:leadCode,name:name,field:field,value:(field==='Max Serves'&&nv===0)?'':nv});
     if(!LIVE) regen();
-    render();
+    render();                                                   // react immediately
+    if(LIVE) apiPost({action:'member',code:leadCode,name:name,field:field,value:(field==='Max Serves'&&nv===0)?'':nv}).catch(()=>{});
   });
   document.querySelectorAll("[data-cap]").forEach(el=>el.onchange=()=>{
     const i=+el.dataset.cap, f=el.dataset.capfield;
@@ -539,31 +562,36 @@ function bind(){
     const firstName=DATA.members.map(m=>m.name).sort()[0]||"";
     DATA.roleCaps.push({name:firstName,role:"Acoustic Gtr",max:2}); regen();render();
   };
-  document.querySelectorAll("[data-black]").forEach(c=>c.onclick=async()=>{
+  document.querySelectorAll("[data-black]").forEach(c=>c.onclick=()=>{
     if(!me)return;const d=c.dataset.black;DATA.blackouts[me]=DATA.blackouts[me]||{};
     const on=DATA.blackouts[me][d];
     if(on)delete DATA.blackouts[me][d];else DATA.blackouts[me][d]=1;
-    if(LIVE)await apiPost({action:"blackout",name:me,date:d,op:on?"remove":"add"});
-    if(!LIVE)regen();render();
+    if(!LIVE)regen();
+    render();                                                   // react immediately
+    if(LIVE)apiPost({action:"blackout",name:me,date:d,op:on?"remove":"add"}).catch(()=>{}); // save in background
   });
   const gen=document.getElementById("gen");if(gen)gen.onclick=async()=>{
-    if(LIVE){await apiPost({action:"generate",code:leadCode});const s=await api("schedule",{});buildFromServerRoster(s.roster);}
-    else regen();
+    if(LIVE){
+      showBusy("Generating roster…");
+      try{ await apiPost({action:"generate",code:leadCode}); const s=await api("schedule",{}); buildFromServerRoster(s.roster); }
+      catch(e){}
+      hideBusy();
+    } else regen();
     render();
   };
   const clr=document.getElementById("clr");if(clr)clr.onclick=()=>{DATA.locks={};if(!LIVE)regen();render();};
-  document.querySelectorAll("[data-assign]").forEach(sel=>sel.onchange=async()=>{
+  document.querySelectorAll("[data-assign]").forEach(sel=>sel.onchange=()=>{
     const [d,role,slot]=sel.dataset.assign.split("|");
-    if(LIVE){await apiPost({action:"override",code:leadCode,date:d,role,slot:+slot,name:sel.value});const s=await api("schedule",{});buildFromServerRoster(s.roster);}
-    else{const a=RESULT.assigned[d];a[role]=a[role]||[];a[role][+slot-1]=sel.value||null;}
-    render();
+    const a=RESULT.assigned[d]||(RESULT.assigned[d]={});a[role]=a[role]||[];a[role][+slot-1]=sel.value||null;
+    render();                                                   // react immediately
+    if(LIVE)apiPost({action:"override",code:leadCode,date:d,role,slot:+slot,name:sel.value}).catch(()=>{});
   });
-  document.querySelectorAll("[data-lock]").forEach(b=>b.onclick=async()=>{
+  document.querySelectorAll("[data-lock]").forEach(b=>b.onclick=()=>{
     const key=b.dataset.lock;const [d,role,slot]=key.split("|");
     const name=((RESULT.assigned[d]||{})[role]||[])[+slot-1];if(!name)return;
     if(DATA.locks[key])delete DATA.locks[key];else DATA.locks[key]=name;
-    if(LIVE)await apiPost({action:"override",code:leadCode,date:d,role,slot:+slot,locked:!!DATA.locks[key]});
     render();
+    if(LIVE)apiPost({action:"override",code:leadCode,date:d,role,slot:+slot,locked:!!DATA.locks[key]}).catch(()=>{});
   });
 }
 
@@ -598,5 +626,22 @@ document.getElementById("settingsBtn").onclick=()=>{
     <div class="right"><button class="btn" id="dc">Close</button></div>`;
   d.showModal();d.querySelector("#dc").onclick=()=>d.close();
 };
-boot();
+function showBusy(msg){const b=document.getElementById("busy");document.getElementById("busymsg").textContent=msg||"Working…";b.style.display="flex";}
+function hideBusy(){document.getElementById("busy").style.display="none";}
+function gateOk(){ try{return sessionStorage.getItem("ss_gate")===SITE_CODE;}catch(e){return false;} }
+function bindGate(){
+  const go=()=>{ const v=document.getElementById("gatein").value;
+    if(v===SITE_CODE){ try{sessionStorage.setItem("ss_gate",v);}catch(e){} document.getElementById("gate").style.display="none"; boot(); }
+    else document.getElementById("gateerr").textContent="Wrong code.";
+  };
+  const b=document.getElementById("gatego");
+  b.onclick=go;
+  document.getElementById("gatein").addEventListener("keydown",e=>{if(e.key==="Enter")go();});
+}
+function startApp(){
+  bindGate();
+  if(SITE_CODE && !gateOk()) document.getElementById("gate").style.display="flex";  // show gate
+  else boot();
+}
+startApp();
 </script>
