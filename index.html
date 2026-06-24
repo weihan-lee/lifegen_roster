@@ -195,10 +195,11 @@ function demoBlackouts(){return {"Wei Han":{"2026-07-12":1,"2026-07-19":1},"Wilf
 function demoRoleCaps(){return [{name:"Wilson",role:"Acoustic Gtr",max:2},{name:"Reuel",role:"Acoustic Gtr",max:2}];}
 
 /* ============ Assignment engine (mirrors the Apps Script) ============ */
-function generate(members,services,blackouts,locks,roleCaps){
+function generate(members,services,blackouts,locks,roleCaps,avoidPairs){
   locks=locks||{};
-  const capMap={}; (roleCaps||[]).forEach(c=>{ if(c&&c.name&&c.role&&c.max!=null&&c.max!=='') capMap[c.name+'|'+c.role]=+c.max; });
-  const roleServed={};
+  const capMap={},gapMap={}; (roleCaps||[]).forEach(c=>{ if(c&&c.name&&c.role){ if(c.max!=null&&c.max!=='')capMap[c.name+'|'+c.role]=+c.max; if(c.gap!=null&&c.gap!=='')gapMap[c.name+'|'+c.role]=+c.gap; } });
+  const avoid={}; (avoidPairs||[]).forEach(p=>{ if(p&&p[0]&&p[1]){ (avoid[p[0]]=avoid[p[0]]||new Set()).add(p[1]); (avoid[p[1]]=avoid[p[1]]||new Set()).add(p[0]); } });
+  const roleServed={}, lastRoleIdx={};
   const byName={};members.forEach(m=>byName[m.name]=m);
   const served={},streak={};members.forEach(m=>{served[m.name]=0;streak[m.name]=0;});
   Object.values(locks).forEach(n=>{if(served[n]!=null)served[n]++;});
@@ -470,12 +471,13 @@ function viewLead(){
         if(optional && !cur && i!==shown) continue;   // only one trailing empty optional
         const locked=DATA.locks[[s.date,role,i+1].join('|')];
         const isDup=cur && dupByDate[s.date][cur]>1;
-        inner+=`<div class="ocell ${isDup?'dup':''} ${optional?'opt':''}">
+        const isAway=cur && DATA.blackouts[cur] && DATA.blackouts[cur][s.date];
+        inner+=`<div class="ocell ${isDup||isAway?'dup':''} ${optional?'opt':''}">
           <select data-assign="${s.date}|${role}|${i+1}" ${optional?'title="optional extra — lock to keep on regenerate"':''}><option value="">${optional?'+ add':'—'}</option>
             ${cands.map(n=>`<option ${n===cur?'selected':''} value="${n}">${n}${DATA.blackouts[n]&&DATA.blackouts[n][s.date]?' ⚠away':''}</option>`).join("")}
           </select>
           <button class="lk" data-lock="${s.date}|${role}|${i+1}" title="lock">${locked?'🔒':'🔓'}</button>
-          ${isDup?'<span class="dupwarn" title="Already on this service">⚠</span>':''}</div>`;
+          ${isDup?'<span class="dupwarn" title="Already on this service">⚠</span>':''}${isAway?'<span class="dupwarn" title="Unavailable that week">⚠</span>':''}</div>`;
       }
       return `<td>${inner}</td>`;
     }).join("");
@@ -523,7 +525,7 @@ function viewLead(){
     <div class="sec" style="margin-top:10px">MD turns</div><div class="chips">${mdChips}</div>
   </div>
   ${capsCard}
-  <div class="card"><h2>Manual override</h2><p class="sub">Roles down, weeks across. Change any slot; 🔒 keeps it on regenerate. <b>⚠ red = same person already on that service</b> (allowed, just flagged). ⚠away = flagged unavailable.</p>
+  <div class="card"><h2>Manual override</h2><p class="sub">Roles down, weeks across. Change any slot; 🔒 keeps it on regenerate. <b>⚠ red = same person twice on a service, or assigned while unavailable</b> (allowed, just flagged). ⚠away marks unavailable people in the dropdown.</p>
     ${overrideGrid}</div>
   <div class="card"><h2>Team — readiness &amp; weights</h2>
     <p class="sub">Click the dots to edit. Readiness / Load Wt / MD Wt are 1–5; Max is a cap (click a set dot again to clear → no cap). Changes save to the sheet${ed?'':' live'}; press <b>Generate</b> to apply them to the roster.</p>
@@ -619,20 +621,18 @@ function openLeadDialog(initialErr){
       else err("Wrong code.");
       return;
     }
-    // enter the Leadership tab right away, then load behind a spinner
+    // validate first — keep the dialog open so a wrong code shows instantly
+    err(""); const btn=d.querySelector("#lcGo"); btn.disabled=true; btn.textContent="Checking…";
+    let m=null;
+    try{ m=await api("members",{code:pin}); }catch(e){ btn.disabled=false; btn.textContent="Unlock"; err("Couldn't reach the server — try again."); return; }
+    if(!m || !m.lead){ btn.disabled=false; btn.textContent="Unlock"; err("Wrong code."); return; }
+    // correct: enter the Leadership tab, then load behind the spinner
     leadCode=pin; mode="lead"; activeTab="leadership"; d.close(); render(); showBusy("Loading…");
     try{
-      const m=await api("members",{code:pin});               // validate against server
-      if(m && m.lead){
-        DATA.members=mapMembers_(m.members);
-        const s=await api("schedule",{}); buildFromServerRoster(s.roster);
-        hideBusy(); render();
-      } else {
-        hideBusy(); mode="member"; activeTab="schedule"; leadCode=null; render(); openLeadDialog("Wrong code.");
-      }
-    }catch(e){
-      hideBusy(); mode="member"; activeTab="schedule"; leadCode=null; render(); openLeadDialog("Couldn't reach the server — try again.");
-    }
+      DATA.members=mapMembers_(m.members);
+      const s=await api("schedule",{}); buildFromServerRoster(s.roster);
+    }catch(e){}
+    hideBusy(); render();
   };
   d.querySelector("#lcGo").onclick=go;
   d.querySelector("#lc").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); go(); } });
