@@ -491,7 +491,9 @@ function viewLead(){
     for(let i=1;i<=maxN;i++) h+=`<span class="d${i<=val?' on':''}" ${o.disabled?'':`data-rate="${name}|${field}|${i}|${o.clear?1:0}"`}></span>`;
     return h+`</span>`;
   };
-  const team=DATA.members.slice().sort((a,b)=>b.readiness-a.readiness).map(m=>
+  const ROLE_SORT=["Worship Leader","Co Worship Leader","Singer","Electric Gtr","Acoustic Gtr","Bass","Piano","Keys","Violin","Drums","Drum Tech"];
+  const primIdx=m=>{const rs=(m.roles&&m.roles.length?m.roles:Object.keys(m.skills));let mi=99;rs.forEach(r=>{const i=ROLE_SORT.indexOf(r);if(i>=0&&i<mi)mi=i;});return mi;};
+  const team=DATA.members.slice().sort((a,b)=> primIdx(a)-primIdx(b) || b.readiness-a.readiness || a.name.localeCompare(b.name)).map(m=>
     `<tr><td>${m.name}</td><td>${m.gender}</td><td>${m.md?'Y':''}</td>
      <td style="font-size:11.5px">${(m.roles&&m.roles.length?m.roles:Object.keys(m.skills)).join(' / ')}</td>
      <td>${dots(m.name,'Readiness',m.readiness,5,{})}</td>
@@ -600,7 +602,7 @@ function bind(){
 
 /* ============ Shell ============ */
 document.getElementById("tabs").onclick=e=>{const b=e.target.closest("button");if(!b)return;activeTab=b.dataset.tab;render();};
-function openLeadDialog(){
+function openLeadDialog(initialErr){
   const d=document.getElementById("dlg");
   d.innerHTML=`<h2 style="font-family:var(--disp);margin:0 0 8px">Leadership access</h2>
     <p class="help" style="margin:0 0 10px">${LIVE?'Enter your leadership code.':'Preview code: 1234'}</p>
@@ -609,6 +611,7 @@ function openLeadDialog(){
     <div class="right"><button class="btn ghost" id="lcCancel">Cancel</button><button class="btn" id="lcGo">Unlock</button></div>`;
   d.showModal();
   const err=msg=>{ d.querySelector("#lcerr").textContent=msg||""; };
+  if(initialErr) err(initialErr);
   const go=async()=>{
     const pin=d.querySelector("#lc").value;
     if(!LIVE){
@@ -616,15 +619,20 @@ function openLeadDialog(){
       else err("Wrong code.");
       return;
     }
-    err(""); showBusy("Checking…");
+    // enter the Leadership tab right away, then load behind a spinner
+    leadCode=pin; mode="lead"; activeTab="leadership"; d.close(); render(); showBusy("Loading…");
     try{
       const m=await api("members",{code:pin});               // validate against server
       if(m && m.lead){
-        leadCode=pin; DATA.members=mapMembers_(m.members);
+        DATA.members=mapMembers_(m.members);
         const s=await api("schedule",{}); buildFromServerRoster(s.roster);
-        mode="lead"; activeTab="leadership"; hideBusy(); d.close(); render();
-      } else { hideBusy(); err("Wrong code."); }
-    }catch(e){ hideBusy(); err("Couldn't reach the server — try again."); }
+        hideBusy(); render();
+      } else {
+        hideBusy(); mode="member"; activeTab="schedule"; leadCode=null; render(); openLeadDialog("Wrong code.");
+      }
+    }catch(e){
+      hideBusy(); mode="member"; activeTab="schedule"; leadCode=null; render(); openLeadDialog("Couldn't reach the server — try again.");
+    }
   };
   d.querySelector("#lcGo").onclick=go;
   d.querySelector("#lc").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); go(); } });
