@@ -104,7 +104,7 @@
 
 <div class="wrap">
   <header class="top">
-    <div class="brand"><h1>Set &amp; Sound</h1><p>Worship team roster</p></div>
+    <div class="brand"><h1>LifeGen Worship</h1><p>Worship team roster</p></div>
     <div class="topbtns">
       <span class="modepill"><span class="dot" id="modeDot"></span><span id="modeLabel">Member</span><span id="liveLabel"></span></span>
       <div style="display:flex;gap:6px">
@@ -127,7 +127,7 @@
 <dialog id="dlg"></dialog>
 
 <div id="gate"><div class="gatebox">
-  <h1>Set &amp; Sound</h1>
+  <h1>LifeGen Worship</h1>
   <p>Enter the team access code.</p>
   <input id="gatein" type="password" placeholder="Access code" autofocus>
   <div id="gateerr"></div>
@@ -300,6 +300,7 @@ async function apiPost(body){
 
 function mapMembers_(list){ return list.map(x=>({...x,skills:x.skills||{},readiness:x.readiness||0,weight:(x.weight&&x.weight>0)?x.weight:1,maxServes:(x.maxServes==null?null:x.maxServes),mdWt:(x.mdWt&&x.mdWt>0)?x.mdWt:1})); }
 async function boot(){
+  showBusy("Loading roster…");
   if(LIVE){
     const m=await api("members",{});DATA.members=mapMembers_(m.members);
     const s=await api("schedule",{});buildFromServerRoster(s.roster);
@@ -307,6 +308,7 @@ async function boot(){
     DATA.members=demoMembers();DATA.services=demoServices();DATA.blackouts=demoBlackouts();DATA.locks={};DATA.roleCaps=demoRoleCaps();
     RESULT=generate(DATA.members,DATA.services,DATA.blackouts,DATA.locks,DATA.roleCaps);
   }
+  hideBusy();
   render();
 }
 // live: re-fetch team WITH the leadership code so skills/readiness/weights load, then rebuild + recompute stats
@@ -491,6 +493,7 @@ function viewLead(){
   };
   const team=DATA.members.slice().sort((a,b)=>b.readiness-a.readiness).map(m=>
     `<tr><td>${m.name}</td><td>${m.gender}</td><td>${m.md?'Y':''}</td>
+     <td style="font-size:11.5px">${(m.roles&&m.roles.length?m.roles:Object.keys(m.skills)).join(' / ')}</td>
      <td>${dots(m.name,'Readiness',m.readiness,5,{})}</td>
      <td>${dots(m.name,'Load Wt',m.weight,5,{amber:true})}</td>
      <td>${dots(m.name,'Max Serves',m.maxServes==null?0:m.maxServes,8,{amber:true,clear:true})}<span class="capnone">${m.maxServes==null?'no cap':''}</span></td>
@@ -522,7 +525,7 @@ function viewLead(){
     ${overrideGrid}</div>
   <div class="card"><h2>Team — readiness &amp; weights</h2>
     <p class="sub">Click the dots to edit. Readiness / Load Wt / MD Wt are 1–5; Max is a cap (click a set dot again to clear → no cap). Changes save to the sheet${ed?'':' live'}; press <b>Generate</b> to apply them to the roster.</p>
-    <table><thead><tr><th>Name</th><th>G</th><th>MD</th><th>Readiness</th><th>Load Wt</th><th>Max</th><th>MD Wt</th></tr></thead><tbody>${team}</tbody></table></div>`;
+    <table><thead><tr><th>Name</th><th>G</th><th>MD</th><th>Roles</th><th>Readiness</th><th>Load Wt</th><th>Max</th><th>MD Wt</th></tr></thead><tbody>${team}</tbody></table></div>`;
 }
 
 /* ============ Actions ============ */
@@ -605,15 +608,28 @@ function openLeadDialog(){
     <div id="lcerr" class="help" style="color:var(--clay);min-height:15px"></div>
     <div class="right"><button class="btn ghost" id="lcCancel">Cancel</button><button class="btn" id="lcGo">Unlock</button></div>`;
   d.showModal();
-  const go=()=>{
+  const err=msg=>{ d.querySelector("#lcerr").textContent=msg||""; };
+  const go=async()=>{
     const pin=d.querySelector("#lc").value;
-    if(LIVE){ leadCode=pin; mode="lead"; activeTab="leadership"; d.close(); render(); refreshLead(); }
-    else if(pin===LEAD_CODE_PREVIEW){ mode="lead"; activeTab="leadership"; d.close(); render(); }
-    else d.querySelector("#lcerr").textContent="Wrong code.";
+    if(!LIVE){
+      if(pin===LEAD_CODE_PREVIEW){ mode="lead"; activeTab="leadership"; d.close(); render(); }
+      else err("Wrong code.");
+      return;
+    }
+    err(""); showBusy("Checking…");
+    try{
+      const m=await api("members",{code:pin});               // validate against server
+      if(m && m.lead){
+        leadCode=pin; DATA.members=mapMembers_(m.members);
+        const s=await api("schedule",{}); buildFromServerRoster(s.roster);
+        mode="lead"; activeTab="leadership"; hideBusy(); d.close(); render();
+      } else { hideBusy(); err("Wrong code."); }
+    }catch(e){ hideBusy(); err("Couldn't reach the server — try again."); }
   };
   d.querySelector("#lcGo").onclick=go;
-  d.querySelector("#lc").addEventListener("keydown",e=>{if(e.key==="Enter")go();});
+  d.querySelector("#lc").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); go(); } });
   d.querySelector("#lcCancel").onclick=()=>d.close();
+  setTimeout(()=>{ const i=d.querySelector("#lc"); if(i) i.focus(); }, 30);
 }
 document.getElementById("modeToggle").onclick=()=>{
   if(mode==="lead"){mode="member";if(activeTab==="leadership")activeTab="schedule";render();return;}
