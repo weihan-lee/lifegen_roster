@@ -192,7 +192,8 @@ function demoServices(){
   return out;
 }
 function demoBlackouts(){return {"Wei Han":{"2026-07-12":1,"2026-07-19":1},"Wilfred":{"2026-07-05":1,"2026-07-12":1,"2026-07-19":1}};}
-function demoRoleCaps(){return [{name:"Wilson",role:"Acoustic Gtr",max:2},{name:"Reuel",role:"Acoustic Gtr",max:2}];}
+function demoRoleCaps(){return [{name:"Wilson",role:"Acoustic Gtr",max:2,gap:8},{name:"Reuel",role:"Acoustic Gtr",max:2,gap:8}];}
+function demoAvoid(){return [["Karyll","Karynn"]];}   // won't fill the same role on the same service
 
 /* ============ Assignment engine (mirrors the Apps Script) ============ */
 function generate(members,services,blackouts,locks,roleCaps,avoidPairs){
@@ -206,7 +207,7 @@ function generate(members,services,blackouts,locks,roleCaps,avoidPairs){
   const reqRoles=s=>Object.keys(s.req).filter(r=>s.req[r]>0);
   const lockedSlots=(date,role)=>{const res=[];Object.keys(locks).forEach(k=>{const p=k.split('|');if(p[0]===date&&p[1]===role)res[(+p[2])-1]=locks[k];});return res;};
   const lockedRolesFor=date=>{const set={};Object.keys(locks).forEach(k=>{const p=k.split('|');if(p[0]===date)set[p[1]]=1;});return Object.keys(set);};
-  function cands(role,date,used,relax){
+  function cands(role,date,used,relax,idx,arr){
     return members.filter(m=>{
       if(!eligible(m,role))return false;
       if(blackouts[m.name]&&blackouts[m.name][date])return false;
@@ -215,6 +216,9 @@ function generate(members,services,blackouts,locks,roleCaps,avoidPairs){
         if(streak[m.name]>=MAX_CONSECUTIVE)return false;                 // forced rest
         if(m.maxServes!=null&&served[m.name]>=m.maxServes)return false;  // global cap
         const cap=capMap[m.name+'|'+role]; if(cap!=null && (roleServed[m.name+'|'+role]||0)>=cap) return false;  // per-role cap
+        const gap=gapMap[m.name+'|'+role]; const last=lastRoleIdx[m.name+'|'+role];
+        if(gap && last!=null && idx!=null && (idx-last)<gap) return false;                                       // spread-out (min weeks between)
+        if(avoid[m.name] && arr && arr.some(n=>n&&avoid[m.name].has(n))) return false;                           // avoid-together (same role)
       }
       return true;
     });
@@ -233,17 +237,17 @@ function generate(members,services,blackouts,locks,roleCaps,avoidPairs){
     return {...s,_o:allRoles,_rr:rr,_a:{}};
   });
   let prevUsed=new Set();
-  sv.forEach(s=>{
+  sv.forEach((s,idx)=>{
     const used=new Set(); s._o.forEach(r=>s._a[r]=[]);
-    s._o.forEach(role=>{ lockedSlots(s.date,role).forEach((nm,i)=>{ if(nm){s._a[role][i]=nm;used.add(nm);roleServed[nm+'|'+role]=(roleServed[nm+'|'+role]||0)+1;} }); });  // pre-apply locks, any role/slot
-    const ord=s._rr.slice().sort((a,b)=>cands(a,s.date,new Set(),false).length-cands(b,s.date,new Set(),false).length);
+    s._o.forEach(role=>{ lockedSlots(s.date,role).forEach((nm,i)=>{ if(nm){s._a[role][i]=nm;used.add(nm);roleServed[nm+'|'+role]=(roleServed[nm+'|'+role]||0)+1;lastRoleIdx[nm+'|'+role]=idx;} }); });  // pre-apply locks
+    const ord=s._rr.slice().sort((a,b)=>cands(a,s.date,new Set(),false,idx,s._a[a]).length-cands(b,s.date,new Set(),false,idx,s._a[b]).length);
     ord.forEach(role=>{for(let slot=1;slot<=s.req[role];slot++){
       if(s._a[role][slot-1])continue;
-      let pool=cands(role,s.date,used,false);
-      if(!pool.length)pool=cands(role,s.date,used,true);               // relax to avoid a gap
+      let pool=cands(role,s.date,used,false,idx,s._a[role]);
+      if(!pool.length)pool=cands(role,s.date,used,true,idx,s._a[role]);   // relax to avoid a gap
       if(!pool.length){s._a[role][slot-1]=null;continue;}
       pool.sort(pickSort(role));
-      const p=pool[0];s._a[role][slot-1]=p.name;used.add(p.name);served[p.name]++;roleServed[p.name+'|'+role]=(roleServed[p.name+'|'+role]||0)+1;
+      const p=pool[0];s._a[role][slot-1]=p.name;used.add(p.name);served[p.name]++;roleServed[p.name+'|'+role]=(roleServed[p.name+'|'+role]||0)+1;lastRoleIdx[p.name+'|'+role]=idx;
     }});
     members.forEach(m=>{ if(used.has(m.name)) streak[m.name]=prevUsed.has(m.name)?streak[m.name]+1:1; else streak[m.name]=0; });
     prevUsed=used;
@@ -284,7 +288,7 @@ function generate(members,services,blackouts,locks,roleCaps,avoidPairs){
 }
 
 /* ============ State ============ */
-let DATA={members:[],services:[],blackouts:{},locks:{},roleCaps:[]};
+let DATA={members:[],services:[],blackouts:{},locks:{},roleCaps:[],avoid:[]};
 let RESULT=null;
 let mode="member",activeTab="schedule",me=null,leadCode=null;
 const LIVE=!!WEB_APP_URL;
@@ -306,8 +310,8 @@ async function boot(){
     const m=await api("members",{});DATA.members=mapMembers_(m.members);
     const s=await api("schedule",{});buildFromServerRoster(s.roster);
   }else{
-    DATA.members=demoMembers();DATA.services=demoServices();DATA.blackouts=demoBlackouts();DATA.locks={};DATA.roleCaps=demoRoleCaps();
-    RESULT=generate(DATA.members,DATA.services,DATA.blackouts,DATA.locks,DATA.roleCaps);
+    DATA.members=demoMembers();DATA.services=demoServices();DATA.blackouts=demoBlackouts();DATA.locks={};DATA.roleCaps=demoRoleCaps();DATA.avoid=demoAvoid();
+    RESULT=generate(DATA.members,DATA.services,DATA.blackouts,DATA.locks,DATA.roleCaps,DATA.avoid);
   }
   hideBusy();
   render();
@@ -508,13 +512,19 @@ function viewLead(){
       <select data-cap="${i}" data-capfield="name" ${ed?'':'disabled'}>${nameOpts(c.name)}</select>
       <select data-cap="${i}" data-capfield="role" ${ed?'':'disabled'} style="min-width:120px">${roleOpts(c.role)}</select>
       <span style="font-size:12px;color:var(--muted)">max</span>
-      <input data-cap="${i}" data-capfield="max" type="number" min="0" step="1" value="${c.max}" ${ed?'':'disabled'} style="width:52px;padding:4px">
+      <input data-cap="${i}" data-capfield="max" type="number" min="0" step="1" value="${c.max}" ${ed?'':'disabled'} style="width:48px;padding:4px">
+      <span style="font-size:12px;color:var(--muted)">gap</span>
+      <input data-cap="${i}" data-capfield="gap" type="number" min="0" step="1" value="${c.gap==null?'':c.gap}" placeholder="—" title="min weeks between serves of this role" ${ed?'':'disabled'} style="width:48px;padding:4px">
       ${ed?`<button class="btn sm danger" data-capdel="${i}">✕</button>`:''}
     </div>`).join("") || '<div class="help">No per-role caps set.</div>';
-  const capsCard=`<div class="card"><h2>Per-role caps</h2>
-    <p class="sub">Limit how many times a person fills a <b>specific role</b> over this run — e.g. Wilson &amp; Reuel max 2 on Acoustic, so Winson takes the rest. Soft: relaxed only if a slot would otherwise be empty.${ed?'':' Edit these in the sheet for live mode.'}</p>
+  const avoidRows=(DATA.avoid||[]).map(p=>`<span class="chip">${p[0]} &nbsp;✕&nbsp; ${p[1]}</span>`).join(" ") || '<div class="help">No avoid pairs set.</div>';
+  const capsCard=`<div class="card"><h2>Per-role caps &amp; spread</h2>
+    <p class="sub"><b>Max</b> = times a person may fill that role this run. <b>Gap</b> = minimum weeks between their serves of it (blank = no spacing). Soft: relaxed only if a slot would otherwise be empty.${ed?'':' Managed in the sheet\'s <b>Role Caps</b> tab (Name / Role / Max / Gap).'}</p>
     ${capRows}
-    ${ed?'<div style="margin-top:8px"><button class="btn ghost sm" id="capAdd">+ Add cap</button></div>':''}</div>`;
+    ${ed?'<div style="margin-top:8px"><button class="btn ghost sm" id="capAdd">+ Add cap</button></div>':''}
+    <div class="sec" style="margin-top:14px">Avoid together <span style="font-weight:400;color:var(--muted)">— won't fill the same role on one service</span></div>
+    <div style="margin-top:6px">${avoidRows}</div>
+    ${ed?'':'<p class="help" style="margin-top:6px">Managed in the sheet\'s <b>Avoid Together</b> tab (two name columns).</p>'}</div>`;
   return `<div class="card"><h2>Generate &amp; balance</h2>
     ${previewControls}
     <div style="display:flex;gap:8px;margin-bottom:10px">
@@ -533,7 +543,7 @@ function viewLead(){
 }
 
 /* ============ Actions ============ */
-function regen(){RESULT=generate(DATA.members,DATA.services,DATA.blackouts,DATA.locks,DATA.roleCaps);}
+function regen(){RESULT=generate(DATA.members,DATA.services,DATA.blackouts,DATA.locks,DATA.roleCaps,DATA.avoid);}
 function bind(){
   const meSel=document.getElementById("meSel");if(meSel)meSel.onchange=e=>{me=e.target.value||null;render();};
   const weeks=document.getElementById("weeks");if(weeks)weeks.onchange=e=>{HORIZON_WEEKS=+e.target.value;DATA.services=demoServices();DATA.locks={};regen();render();};
@@ -561,7 +571,7 @@ function bind(){
   document.querySelectorAll("[data-cap]").forEach(el=>el.onchange=()=>{
     const i=+el.dataset.cap, f=el.dataset.capfield;
     if(!DATA.roleCaps[i])return;
-    DATA.roleCaps[i][f] = (f==='max') ? (el.value===''?'':+el.value) : el.value;
+    DATA.roleCaps[i][f] = (f==='max'||f==='gap') ? (el.value===''?'':+el.value) : el.value;
     regen();render();
   });
   document.querySelectorAll("[data-capdel]").forEach(b=>b.onclick=()=>{ DATA.roleCaps.splice(+b.dataset.capdel,1); regen();render(); });
